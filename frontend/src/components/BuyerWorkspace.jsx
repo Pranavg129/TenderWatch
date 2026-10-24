@@ -28,7 +28,7 @@ function BidderHistory({ data }) {
   </>;
 }
 
-function SubmittedBids({ bids, onStatusChange }) {
+function SubmittedBids({ bids, onStatusChange, synthetic }) {
   if (!bids.length) return <div className="empty">No demo bids yet for this tender. Switch to Supplier readiness → Prepare bid to create one.</div>;
   return <div className="bid-submissions">
     {bids.map(bid => <article className="submitted-bid" key={bid.bid_id}>
@@ -38,11 +38,11 @@ function SubmittedBids({ bids, onStatusChange }) {
       </div>
       <p>{bid.technical_summary}</p>
       <p className="id">Prepared documents: {(bid.prepared_documents || []).join(", ") || "Not listed"}</p>
-      <label className="review-status">Buyer review status
+      {synthetic ? <span className="chip">Sample bid · no portal submission</span> : <label className="review-status">Buyer review status
         <select value={bid.status} onChange={event => onStatusChange(bid.bid_id, event.target.value)}>
           {["Received (demo)", "Under review", "Clarification needed", "Evaluated"].map(status => <option key={status}>{status}</option>)}
         </select>
-      </label>
+      </label>}
     </article>)}
   </div>;
 }
@@ -63,7 +63,7 @@ export default function BuyerWorkspace({ tenders, tenderId, onTenderChange, hist
     <div className="history-toolbar"><button type="button" className="secondary-button" onClick={onLoadSamples}>Load illustrative bidder comparison</button><span className="id">Fictional bidders, bids and scores.</span></div>
     <h3 className="section-title">Submitted bids</h3>
     <p className="buyer-intro">Review each demo submission against the criteria published in its tender. Status changes stay in the running demo backend.</p>
-    <SubmittedBids bids={bids} onStatusChange={onStatusChange} />
+    <SubmittedBids bids={bids} onStatusChange={onStatusChange} synthetic={Boolean(history?.is_synthetic)} />
     <h3 className="section-title">CPPP public award records</h3>
     <p className="buyer-intro">Awards are not proof of completion or quality. Confirm the bidder’s legal identity and review the official source.</p>
     <BidderHistory data={history} />
