@@ -24,6 +24,7 @@ GENERIC_TITLES = (
     "active tenders",
     "tender search",
     "tenders home",
+    "tenders ministry",
 )
 
 
@@ -62,11 +63,16 @@ def is_generic_page(title, snippet="", url=""):
     title_text = " ".join(title_text.split())
     if any(title_text == phrase for phrase in GENERIC_TITLES):
         return True
-    if "eprocurement system" in title_text or title_text.startswith("tenders by "):
+    if ("eprocurement system" in title_text or title_text.startswith("tenders by ")
+            or title_text.startswith("tenders ministry of ")
+            or title_text.startswith("tenders government of ")):
         return True
     if len(title_text) < 100 and any(phrase in title_text for phrase in GENERIC_TITLES):
         return True
     path = urlparse(str(url or "")).path.rstrip("/").lower()
+    if path in {"/tender", "/tenders", "/procurement", "/procurements"}:
+        return not bool(re.search(r"(?:tender|bid|nit|rfp)[-_ /]?[a-z0-9]{3,}",
+                                  urlparse(str(url or "")).query + path, re.I))
     return path in {"/eprocure/app", "/"} and not re.search(
         r"(tender|bid|corrig)", str(url or ""), re.I
     )
@@ -81,7 +87,32 @@ def _boilerplate(text):
         "tenders by organisation",
         "tenders by organization",
         "latest corrigendums",
+        "skip to main content",
+        "keyword search please enter a value",
+        "about us about mea countries/regions",
     ))
+
+
+def _clean_document_text(title, text):
+    """Drop portal chrome and return only body text that looks tender-specific."""
+    value = " ".join(str(text or "").split())
+    if not value:
+        return ""
+    anchors = (
+        "notice inviting tender", "tender reference number", "tender id",
+        "scope of work", "bid submission end date", "bid opening date",
+        "estimated tender value", "earnest money deposit", "tender for ",
+        "invitation for bids", "request for proposal",
+    )
+    lower = value.lower()
+    positions = [lower.find(anchor) for anchor in anchors if lower.find(anchor) >= 0]
+    if _boilerplate(value):
+        if not positions:
+            return ""
+        value = value[min(positions):]
+    if is_generic_page(title, value[:500], "") or len(value) < 100:
+        return ""
+    return value
 
 
 def normalize(row, source):
@@ -94,6 +125,8 @@ def normalize(row, source):
         return None
     if _boilerplate(snippet):
         snippet = ""
+    if not snippet or len(snippet) < 30:
+        return None
     native = str(row.get("tender_id") or row.get("id") or "")
     key = hashlib.sha1((native + url + title).encode()).hexdigest()[:10].upper()
     return {
@@ -108,7 +141,7 @@ def normalize(row, source):
         "turnover_inr": number(row.get("turnover_inr") or row.get("minimum_turnover")),
         "years_experience": number(row.get("years_experience") or row.get("experience_years")),
         "reference_id": native or None,
-        "description": snippet[:1200] or "Open the official tender notice for the scope and bid requirements.",
+        "description": snippet[:1200],
         "source": "TinyFish Search · official details may be incomplete",
         "source_url": url,
         "is_live": True,
@@ -189,8 +222,9 @@ def _enrich_from_documents(tenders, key):
         page = by_url.get(tender["source_url"])
         if not page:
             continue
-        text = str(page.get("text") or "").strip()
-        if not text or _boilerplate(text) or is_generic_page(page.get("title"), text[:500], page.get("url")):
+        raw_text = str(page.get("text") or "").strip()
+        text = _clean_document_text(page.get("title"), raw_text)
+        if not text:
             continue
         page_title = str(page.get("title") or "").strip()
         if page_title and not is_generic_page(page_title, "", tender["source_url"]) and len(page_title) > len(tender["title"]):
@@ -227,7 +261,10 @@ def _enrich_from_documents(tenders, key):
                 if is_official_url(link_url) and re.search(r"corrig|amend|addend", label + " " + link_url, re.I):
                     tender["corrigendum_url"] = link_url
                     break
-    return tenders
+    # Suppress results with no usable snippet and no readable official notice.
+    return [t for t in tenders if t.get("document_readable") or
+            (t.get("description") and t["description"] !=
+             "Open the official tender notice for the scope and bid requirements.")]
 
 
 def read_tender_documents(tender):
