@@ -22,7 +22,7 @@ The exact capabilities available depend on the current implementation and config
 
 - **Backend:** Python and FastAPI
 - **HTTP integration:** HTTPX
-- **Tender research automation:** TinyFish integration (requires a configured API endpoint and key)
+- **Tender research automation:** TinyFish Web Agent (requires a private API key)
 - **Tests:** pytest
 
 The frontend and remaining backend modules will be documented here as they are implemented.
@@ -59,14 +59,21 @@ uvicorn backend.main:app --reload
 | Variable | Purpose |
 |---|---|
 | `TINYFISH_API_KEY` | API key for TinyFish; keep it private |
-| `TINYFISH_API_URL` | Base URL or endpoint required by the TinyFish client |
+| `TINYFISH_TENDER_SOURCE_URL` | Public `.gov.in` or `.nic.in` tender page TinyFish should read; defaults to CPPP |
 | `APP_ENV` | Environment label, such as `development` |
 
-Confirm the required TinyFish endpoint and request format against the API documentation and the implementation before running live requests.
+The backend calls TinyFish's documented Web Agent endpoint. The browser never receives the API key. After setting a key, choose **Fetch live tenders** in the supplier workspace and enter a search phrase in the tender search box. Only public pages are read; login, bid placement, and external submissions are not automated. Extracted fields can be incomplete, so check each linked official notice.
 
 ## Development status
 
 This repository is under active development. Do not assume a feature is complete merely because it appears in the intended workflow above. Verify the current code, tests, and configured data sources before presenting a capability as working.
+
+
+## Demo bid workflow
+
+**Prepare bid** checks the saved business profile and opens a short tender summary, offer amount, technical offer, and document-readiness checklist. **Submit demo bid** stores the record in the running backend's memory and makes it visible in the buyer review workspace. This is a private TenderWatch demonstration record; it is not sent to CPPP, GeM, or another procurement portal. Restarting the backend clears demo bids.
+
+Bidder history is shown only for suppliers who actually submitted a demo bid for the selected tender. The current build does not have a verified contract-performance data source, so it shows **History unavailable** rather than inventing a trust rating. A missing record means unknown, not poor performance.
 
 ## Responsible use
 
