@@ -152,34 +152,43 @@ def eligibility(tender_id: str, profile: BusinessProfile):
 
 @app.get("/api/bidders/history/{tender_id}")
 def bidder_history(tender_id: str):
-    """Show history slots only for bidders who actually submitted for this tender."""
+    """Show real demo submitters and public CPPP award notices matching their names."""
     tender = find_tender(tender_id)
     if not tender:
         raise HTTPException(status_code=404, detail="Tender not found")
     submitted = [b for b in BID_SUBMISSIONS if b["tender_id"] == tender_id]
-    # TinyFish provider seam: connect here after confirming the authorized API schema,
-    # credentials, source URLs, and supplier-identity matching requirements.
-    # Do not infer performance from a name-only match.
-    bidders = [{
-        "bidder_id": b["bid_id"],
-        "name": b["bidder_name"],
-        "contract_count": 0,
-        "completed_count": 0,
-        "on_time_count": 0,
-        "delayed_count": 0,
-        "contracts": [],
-        "coverage": "No verified history source connected",
-    } for b in submitted]
     from datetime import datetime, timezone
+    bidders = []
+    for bid in submitted:
+        records = tinyfish_client.search_cppp_award_history(bid["bidder_name"])
+        bidders.append({
+            "bidder_id": bid["bid_id"],
+            "name": bid["bidder_name"],
+            "award_records": records,
+            "award_record_count": len(records),
+            "coverage": (
+                "CPPP public award records found by name; legal identity is unverified"
+                if records else
+                "No matching public CPPP award result found; this is not a negative performance finding"
+            ),
+            "identity_verified": False,
+            "rating": None,
+        })
     return {
         "tender_id": tender_id,
-        "source": "No verified external performance source connected",
+        "source": "CPPP public Bid Awards search via TinyFish",
         "is_synthetic": False,
         "records_verified": False,
+        "identity_match": "Name-only match; confirm legal entity before relying on a result",
         "checked_at": datetime.now(timezone.utc).isoformat(),
         "bidders": bidders,
-        "notice": "This endpoint does not fetch real contract-performance records. A missing history record is unknown, not a negative rating.",
+        "notice": (
+            "CPPP Bid Awards may show awarded tenders, selected bidder names, bid counts, award dates, and contract values. "
+            "These records do not prove delivery, quality, or completion. Matches are by name only, are not a verified identity, "
+            "and no trust rating is calculated. Missing results mean unknown, not poor performance."
+        ),
     }
+
 
 @app.get("/api/demo/buyer-scenario/{tender_id}")
 def demo_buyer_scenario(tender_id: str):
