@@ -101,6 +101,18 @@ def refresh_tenders(request: TenderSearch):
             "source": "TinyFish public extraction",
             "notice": "Extracted tender details may be incomplete or stale. Verify official notices and corrigenda."}
 
+@app.get("/api/tenders/{tender_id}/documents")
+def tender_documents(tender_id: str):
+    """Read the public tender notice and linked corrigenda on demand."""
+    tender = find_tender(tender_id)
+    if not tender:
+        raise HTTPException(status_code=404, detail="Tender not found")
+    try:
+        return tinyfish_client.read_tender_documents(tender)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+
 @app.get("/api/tinyfish/status")
 def tinyfish_status():
     return tinyfish_client.status()
