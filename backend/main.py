@@ -99,7 +99,12 @@ def refresh_tenders(request: TenderSearch):
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {"items": LIVE_TENDERS, "count": len(LIVE_TENDERS),
             "source": "TinyFish public extraction",
-            "notice": "Extracted tender details may be incomplete or stale. Verify official notices and corrigenda."}
+            "notice": (
+                "No specific tender notice from an official .gov.in or .nic.in page matched this search. "
+                "General portal pages are ignored; try a department, item, or tender-reference keyword."
+                if not LIVE_TENDERS else
+                "Details are extracted from official tender pages where readable; verify the notice and latest corrigenda."
+            )}
 
 @app.get("/api/tenders/{tender_id}/documents")
 def tender_documents(tender_id: str):
