@@ -20,12 +20,13 @@ The exact capabilities available depend on the current implementation and config
 
 ## Tech stack
 
+- **Frontend:** React 19 with Vite
 - **Backend:** Python and FastAPI
 - **HTTP integration:** HTTPX
 - **Tender research automation:** TinyFish Web Agent (requires a private API key)
-- **Tests:** pytest
+- **Backend tests:** pytest
 
-The frontend and remaining backend modules will be documented here as they are implemented.
+The frontend is split into React screens and reusable components. API helpers and sample tender data live in separate modules; styles are maintained in a standalone stylesheet.
 
 ## Getting started
 
@@ -86,3 +87,18 @@ Bidder history is shown only for suppliers who actually submitted a demo bid for
 ## Project notes
 
 See [SUBMISSION.md](SUBMISSION.md) for the demo-readiness checklist and integrity notes.
+
+
+## Run the React frontend
+
+Install Node.js 22 LTS (Vite requires Node.js 20.19+ or 22.12+), then from the repository root:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open the local URL printed by Vite (normally http://127.0.0.1:5173). Keep the FastAPI backend running in a separate terminal on port 8000; Vite forwards `/api` requests to it. The frontend is no longer served by opening `index.html` directly or using `py -m http.server`.
+
+Create a production bundle with `npm run build` from the `frontend` folder. The generated `frontend/dist` directory is build output and should not be edited by hand.
