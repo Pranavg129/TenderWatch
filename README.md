@@ -73,7 +73,7 @@ This repository is under active development. Do not assume a feature is complete
 
 **Prepare bid** checks the saved business profile and opens a short tender summary, offer amount, technical offer, and document-readiness checklist. **Submit demo bid** stores the record in the running backend's memory and makes it visible in the buyer review workspace. This is a private TenderWatch demonstration record; it is not sent to CPPP, GeM, or another procurement portal. Restarting the backend clears demo bids.
 
-Bidder history is shown only for suppliers who actually submitted a demo bid for the selected tender. The current build does not have a verified contract-performance data source, so it shows **History unavailable** rather than inventing a trust rating. A missing record means unknown, not poor performance.
+Bidder history is shown only for suppliers who actually submitted a demo bid for the selected tender. When the buyer review loads, the backend uses TinyFish to search the public CPPP Bid Awards index for exact name mentions and displays matching source snippets and links. These are name-only matches: they do not verify the supplier legal identity, prove delivery or quality, or produce a trust rating. CPPP award data can show details such as selected bidder, bid count, award date, and contract value where published. A missing record means unknown, not poor performance. The current demo stores bid submissions in memory and searches CPPP on demand; production use needs official integration approval, stronger legal-entity matching, caching, and a transparent performance-evaluation policy.
 
 ## Responsible use
 
