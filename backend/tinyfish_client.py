@@ -39,7 +39,8 @@ def normalize(row, source):
             "deadline": row.get("deadline") or row.get("submission_deadline"),
             "emd_inr": number(row.get("emd_inr") or row.get("emd")),
             "turnover_inr": number(row.get("turnover_inr") or row.get("minimum_turnover")),
-            "years_experience": number(row.get("years_experience") or row.get("experience_years")),\n            "reference_id": native or None,
+            "years_experience": number(row.get("years_experience") or row.get("experience_years")),
+            "reference_id": native or None,
             "description": str(row.get("description") or row.get("scope") or "See official notice."),
             "source": "TinyFish extraction · verify official notice", "source_url": url, "is_live": True}
 
