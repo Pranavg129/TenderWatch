@@ -31,7 +31,7 @@ def normalize(row, source):
         url = source
     native = str(row.get("tender_id") or row.get("id") or "")
     key = hashlib.sha1((native + url + title).encode()).hexdigest()[:10].upper()
-    return {"id": native or "TW-LIVE-" + key, "title": title[:240],
+    return {"id": "TW-LIVE-" + key, "title": title[:240],
             "buyer": str(row.get("buyer") or row.get("organization") or "Buyer not listed"),
             "location": str(row.get("location") or "Location not listed"),
             "category": str(row.get("category") or "Other"),
@@ -39,7 +39,7 @@ def normalize(row, source):
             "deadline": row.get("deadline") or row.get("submission_deadline"),
             "emd_inr": number(row.get("emd_inr") or row.get("emd")),
             "turnover_inr": number(row.get("turnover_inr") or row.get("minimum_turnover")),
-            "years_experience": number(row.get("years_experience") or row.get("experience_years")),
+            "years_experience": number(row.get("years_experience") or row.get("experience_years")),\n            "reference_id": native or None,
             "description": str(row.get("description") or row.get("scope") or "See official notice."),
             "source": "TinyFish extraction · verify official notice", "source_url": url, "is_live": True}
 
