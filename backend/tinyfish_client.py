@@ -297,9 +297,12 @@ def search_tenders(query="active tenders", limit=10):
         raise RuntimeError("Tender source must use an official .gov.in or .nic.in domain.")
 
     terms = query.strip() or "active tenders"
+    # Avoid site:OR syntax here: it was returning broad portal pages and no
+    # individual tenders from TinyFish Search. Official-domain allowlisting is
+    # applied to each result below instead.
     search_query = (
-        f"India active public procurement specific tender notice bid requirements {terms} "
-        "site:eprocure.gov.in OR site:*.gov.in OR site:*.nic.in"
+        f"{terms} current open Indian government public procurement tender notice "
+        "tender reference bid closing date EMD"
     )
     try:
         with httpx.Client(timeout=httpx.Timeout(15.0, connect=5.0)) as client:
