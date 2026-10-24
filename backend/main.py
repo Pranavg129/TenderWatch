@@ -160,15 +160,22 @@ def bidder_history(tender_id: str):
     from datetime import datetime, timezone
     bidders = []
     for bid in submitted:
-        records = tinyfish_client.search_cppp_award_history(bid["bidder_name"])
+        lookup_error = None
+        try:
+            records = tinyfish_client.search_cppp_award_history(bid["bidder_name"])
+        except RuntimeError as exc:
+            records = []
+            lookup_error = str(exc)
         bidders.append({
             "bidder_id": bid["bid_id"],
             "name": bid["bidder_name"],
             "award_records": records,
             "award_record_count": len(records),
+            "lookup_error": lookup_error,
             "coverage": (
                 "CPPP public award records found by name; legal identity is unverified"
                 if records else
+                "Lookup unavailable: " + lookup_error if lookup_error else
                 "No matching public CPPP award result found; this is not a negative performance finding"
             ),
             "identity_verified": False,
