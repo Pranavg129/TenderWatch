@@ -118,14 +118,14 @@ export default function App() {
     }
   }
 
-  async function loadBuyerTender() {
-    if (buyerLoading || !buyerTenderId) return;
+  async function loadBuyerTender(tenderId = buyerTenderId) {
+    if (buyerLoading || !tenderId) return;
     setBuyerLoading(true);
     setBuyerStatus("Loading selected tender and CPPP award matches…");
     try {
       const [historyData, bidData] = await Promise.all([
-        api("/bidders/history/" + encodeURIComponent(buyerTenderId)),
-        api("/bids?tender_id=" + encodeURIComponent(buyerTenderId))
+        api("/bidders/history/" + encodeURIComponent(tenderId)),
+        api("/bids?tender_id=" + encodeURIComponent(tenderId))
       ]);
       setHistory(historyData);
       setBuyerBids(bidData.items || []);
@@ -172,7 +172,7 @@ export default function App() {
   async function reloadBids() {
     const data = await api("/bids");
     setUserBids(data.items || []);
-    await loadBuyerTender();
+    if (mode === "buyer") await loadBuyerTender();
   }
 
   return <>
@@ -192,7 +192,7 @@ export default function App() {
         onFetchLive={fetchLive} onPrepareBid={setDialogTender} onToggleAlert={toggleAlert}
         resetFilters={() => { setQuery(""); setCategory("All"); setEligibilityFilter("All results"); }}
       /> : <BuyerWorkspace
-        tenders={tenders} tenderId={buyerTenderId} onTenderChange={id => { setBuyerTenderId(id); setHistory(null); setBuyerBids([]); }}
+        tenders={tenders} tenderId={buyerTenderId} onTenderChange={id => { setBuyerTenderId(id); setHistory(null); setBuyerBids([]); loadBuyerTender(id); }}
         history={history} bids={buyerBids} status={buyerStatus} onRefresh={loadBuyerTender}
         onLoadSamples={loadSampleEvaluation} onStatusChange={changeBidStatus}
       />}
