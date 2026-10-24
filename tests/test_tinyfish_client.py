@@ -17,7 +17,19 @@ def test_generic_portal_pages_are_not_tenders():
         "title": "Tender for Design, Supply, Installation, Integration",
         "url": "https://spg.nic.in/docs/Tenders/tender-specification.pdf",
         "snippet": "Various search options built in the CPP Portal.",
-    }, source)["description"].startswith("Open the official tender notice")
+    }, source) is None
+    assert tinyfish_client.normalize({
+        "title": "Tenders | Ministry of External Affairs, Government of India",
+        "url": "https://www.mea.gov.in/tenders",
+        "snippet": "Skip to main content Government of India Ministry of External Affairs Keyword Search Please enter a value. About Us About MEA Countries/Regions & Missions/Posts",
+    }, source) is None
+
+
+def test_ministry_navigation_is_not_tender_document_content():
+    nav = "Skip to main content Government of India Ministry of External Affairs Keyword Search Please enter a value. About Us About MEA Countries/Regions & Missions/Posts"
+    assert tinyfish_client._clean_document_text("Tenders | Ministry of External Affairs", nav) == ""
+    notice = "Notice Inviting Tender: Supply and installation of networking equipment. Bid submission end date: 08-11-2026."
+    assert "Supply and installation" in tinyfish_client._clean_document_text("Tender Notice", notice)
 
 
 def test_search_results_are_normalized_without_inventing_missing_fields(monkeypatch):
