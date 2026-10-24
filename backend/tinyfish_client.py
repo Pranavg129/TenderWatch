@@ -156,7 +156,7 @@ def _fetch_pages(client, key, urls):
 def _parse_amount(text, labels):
     label = "|".join(labels)
     match = re.search(
-        rf"(?is)(?:{label})[^\\d₹]{{0,100}}(?:₹|rs\\.?|inr)?\\s*([\\d][\\d,]*(?:\\.\\d+)?)",
+        rf"(?is)(?:{label})[^\d₹]{{0,100}}(?:₹|rs\.?|inr)?\s*([\d][\d,]*(?:\.\d+)?)",
         str(text or ""),
     )
     return number(match.group(1).replace(",", "")) if match else None
@@ -165,7 +165,7 @@ def _parse_amount(text, labels):
 def _parse_deadline(text):
     labels = r"bid submission end date|submission end date|bid closing date|closing date|last date (?:for|of) submission|submission deadline"
     match = re.search(
-        rf"(?is)(?:{labels})[^\\d]{{0,100}}(\\d{{1,2}}[/-]\\d{{1,2}}[/-]\\d{{2,4}}(?:\\s+\\d{{1,2}}:\\d{{2}}\\s*(?:am|pm)?)?|\\d{{4}}-\\d{{2}}-\\d{{2}})",
+        rf"(?is)(?:{labels})[^\d]{{0,100}}(\d{{1,2}}[/-]\d{{1,2}}[/-]\d{{2,4}}(?:\s+\d{{1,2}}:\d{{2}}\s*(?:am|pm)?)?|\d{{4}}-\d{{2}}-\d{{2}})",
         str(text or ""),
     )
     return " ".join(match.group(1).split()) if match else None
@@ -215,7 +215,7 @@ def _enrich_from_documents(tenders, key):
             tender["deadline"] = _parse_deadline(text)
         if tender.get("years_experience") is None:
             match = re.search(
-                r"(?i)(?:minimum|required|relevant) experience[^.\\n]{0,100}?(\\d{1,2})\\s*years?",
+                r"(?i)(?:minimum|required|relevant) experience[^.\n]{0,100}?(\d{1,2})\s*years?",
                 text,
             )
             if match:
