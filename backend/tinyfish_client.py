@@ -267,6 +267,84 @@ def _enrich_from_documents(tenders, key):
              "Open the official tender notice for the scope and bid requirements.")]
 
 
+
+def search_cppp_award_history(bidder_name, limit=5):
+    """Search CPPP's public Bid Awards index for exact bidder-name mentions.
+
+    This returns source evidence only. CPPP award records do not establish
+    contract completion/quality, and a name match does not verify legal identity.
+    """
+    name = " ".join(str(bidder_name or "").split())
+    key = os.getenv("TINYFISH_API_KEY", "").strip()
+    if not key:
+        return []
+    if len(name) < 3:
+        return []
+    query = f'"{name}" site:eprocure.gov.in/cppp/resultoftenders'
+    try:
+        with httpx.Client(timeout=httpx.Timeout(18.0, connect=6.0)) as client:
+            response = client.get(
+                SEARCH_URL,
+                params={"query": query},
+                headers={"X-API-Key": key, "Accept": "application/json"},
+            )
+            response.raise_for_status()
+            candidates = rows(response.json())
+            award_rows = []
+            for item in candidates:
+                if not isinstance(item, dict):
+                    continue
+                url = str(item.get("url") or item.get("source_url") or "")
+                parsed = urlparse(url)
+                title = str(item.get("title") or "").strip()
+                snippet = str(item.get("snippet") or item.get("description") or "").strip()
+                if (parsed.hostname != "eprocure.gov.in"
+                        or "/cppp/resultoftenders" not in parsed.path.lower()):
+                    continue
+                if name.casefold() in (title + " " + snippet).casefold():
+                    award_rows.append({
+                        "title": title[:240] or "CPPP Bid Award search result",
+                        "url": url,
+                        "evidence": snippet[:1000],
+                        "match_method": "Exact bidder-name text in CPPP search result; legal entity not verified",
+                        "source_type": "CPPP public Bid Awards",
+                        "identity_verified": False,
+                    })
+            # Some indexed records expose bidder names only in the fetched award page.
+            urls = list(dict.fromkeys(
+                str(item.get("url") or item.get("source_url") or "")
+                for item in candidates if isinstance(item, dict)
+                and urlparse(str(item.get("url") or item.get("source_url") or "")).hostname == "eprocure.gov.in"
+                and "/cppp/resultoftenders" in urlparse(str(item.get("url") or item.get("source_url") or "")).path.lower()
+            ))[:max(1, min(limit, 5))]
+            if urls:
+                pages = _fetch_pages(client, key, urls)
+                for page in pages:
+                    url = str(page.get("final_url") or page.get("url") or "")
+                    text = " ".join(str(page.get("text") or "").split())
+                    if (urlparse(url).hostname != "eprocure.gov.in"
+                            or "/cppp/resultoftenders" not in urlparse(url).path.lower()):
+                        continue
+                    start = text.casefold().find(name.casefold())
+                    if start < 0:
+                        continue
+                    evidence = text[max(0, start - 220):start + len(name) + 420]
+                    award_rows.append({
+                        "title": str(page.get("title") or "CPPP Bid Award record")[:240],
+                        "url": url,
+                        "evidence": evidence,
+                        "match_method": "Exact bidder-name text in CPPP award page; legal entity not verified",
+                        "source_type": "CPPP public Bid Awards",
+                        "identity_verified": False,
+                    })
+            deduped = {}
+            for record in award_rows:
+                deduped[record["url"]] = record
+            return list(deduped.values())[:max(1, min(limit, 5))]
+    except (httpx.HTTPError, json.JSONDecodeError):
+        return []
+
+
 def read_tender_documents(tender):
     """Read official tender page and linked corrigendum/addendum documents on demand."""
     key = os.getenv("TINYFISH_API_KEY", "").strip()
