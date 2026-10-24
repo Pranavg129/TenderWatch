@@ -163,6 +163,58 @@ def test_no_actual_submission_means_no_actual_bidder_history(monkeypatch):
     assert result["is_synthetic"] is False
 
 
+def test_cppp_award_history_returns_source_matches_without_rating(monkeypatch):
+    monkeypatch.setenv("TINYFISH_API_KEY", "test-key")
+    bidder_name = "Example Electrical Private Limited"
+    award_url = "https://eprocure.gov.in/cppp/resultoftenders"
+
+    class FakeResponse:
+        def __init__(self, payload):
+            self.payload = payload
+
+        def raise_for_status(self):
+            pass
+
+        def json(self):
+            return self.payload
+
+    class FakeClient:
+        def __init__(self, **_kwargs):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *_args):
+            return False
+
+        def get(self, url, **kwargs):
+            assert url == tinyfish_client.SEARCH_URL
+            assert bidder_name in kwargs["params"]["query"]
+            assert "site:eprocure.gov.in/cppp/resultoftenders" in kwargs["params"]["query"]
+            return FakeResponse({"results": [{
+                "title": "Award result for electrical supply",
+                "url": award_url,
+                "snippet": f"Selected bidder: {bidder_name}",
+            }]})
+
+        def post(self, url, **kwargs):
+            assert url == tinyfish_client.FETCH_URL
+            return FakeResponse({"results": [{
+                "title": "Award result for electrical supply",
+                "url": award_url,
+                "text": f"Selected bidder: {bidder_name}. Contract award details.",
+            }]})
+
+    monkeypatch.setattr(tinyfish_client.httpx, "Client", FakeClient)
+    records = tinyfish_client.search_cppp_award_history(bidder_name)
+    assert len(records) == 1
+    assert records[0]["source_type"] == "CPPP public Bid Awards"
+    assert records[0]["identity_verified"] is False
+    assert bidder_name in records[0]["evidence"]
+    assert "rating" not in records[0]
+
+
 def test_live_tender_with_missing_criteria_stays_review_required(monkeypatch):
     tender = {
         "id": "TW-LIVE-UNKNOWN",
