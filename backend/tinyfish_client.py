@@ -1,13 +1,28 @@
-"""TinyFish public tender discovery client; reads public listings only."""
+"""TinyFish public tender discovery and official document reader."""
 import hashlib
 import json
 import os
+import re
 from urllib.parse import urlparse
 
 import httpx
 
 SEARCH_URL = "https://api.search.tinyfish.ai"
+FETCH_URL = "https://api.fetch.tinyfish.ai"
 DEFAULT_SOURCE_URL = "https://eprocure.gov.in/eprocure/app"
+GENERIC_TITLES = (
+    "eprocurement system government of india",
+    "government eprocurement system",
+    "eprocurement system for organisations",
+    "eprocurement system for organizations",
+    "tenders by organisation",
+    "tenders by organization",
+    "tenders by closing date",
+    "cppp tenders",
+    "active tenders",
+    "tender search",
+    "tenders home",
+)
 
 
 def status():
@@ -40,18 +55,27 @@ def is_official_url(value):
     )
 
 
+def is_generic_page(title, snippet="", url=""):
+    title_text = re.sub(r"[^a-z0-9 ]", " ", str(title or "").lower())
+    title_text = " ".join(title_text.split())
+    if any(title_text == phrase for phrase in GENERIC_TITLES):
+        return True
+    if len(title_text) < 100 and any(phrase in title_text for phrase in GENERIC_TITLES):
+        return True
+    path = urlparse(str(url or "")).path.rstrip("/").lower()
+    return path in {"/eprocure/app", "/eprocure/app"}
+
+
 def normalize(row, source):
     if not isinstance(row, dict):
         return None
     title = str(row.get("title") or row.get("tender_title") or "").strip()
-    if not title:
-        return None
     url = str(row.get("url") or row.get("source_url") or "")
-    if not is_official_url(url):
+    snippet = str(row.get("snippet") or row.get("description") or "").strip()
+    if not title or not is_official_url(url) or is_generic_page(title, snippet, url):
         return None
     native = str(row.get("tender_id") or row.get("id") or "")
     key = hashlib.sha1((native + url + title).encode()).hexdigest()[:10].upper()
-    snippet = str(row.get("snippet") or row.get("description") or "").strip()
     # Search snippets do not reliably contain qualification figures. Keep those
     # unknown so eligibility screening reports "Review required" instead of guessing.
     return {
@@ -66,7 +90,7 @@ def normalize(row, source):
         "turnover_inr": number(row.get("turnover_inr") or row.get("minimum_turnover")),
         "years_experience": number(row.get("years_experience") or row.get("experience_years")),
         "reference_id": native or None,
-        "description": snippet[:1200] or "Open the official notice for complete tender details.",
+        "description": snippet[:1200] or "Open the official tender notice for the complete scope.",
         "source": "TinyFish Search · verify official notice",
         "source_url": url,
         "is_live": True,
@@ -93,8 +117,81 @@ def rows(result):
     return []
 
 
+def _fetch_pages(client, key, urls):
+    response = client.post(
+        FETCH_URL,
+        headers={"X-API-Key": key, "Content-Type": "application/json", "Accept": "application/json"},
+        json={"urls": urls[:10], "format": "markdown", "links": True},
+    )
+    response.raise_for_status()
+    return rows(response.json())
+
+
+def _link_items(page):
+    links = page.get("links") or []
+    if isinstance(links, dict):
+        links = links.get("links", [])
+    return links if isinstance(links, list) else []
+
+
+def read_tender_documents(tender):
+    """Read official tender page and linked corrigendum/addendum documents on demand."""
+    key = os.getenv("TINYFISH_API_KEY", "").strip()
+    if not key:
+        raise RuntimeError("TinyFish is not configured. Add TINYFISH_API_KEY to backend .env.")
+    url = str(tender.get("source_url") or "")
+    if not is_official_url(url):
+        raise RuntimeError("This tender has no verified official document link.")
+    try:
+        with httpx.Client(timeout=httpx.Timeout(45.0, connect=8.0)) as client:
+            notice_pages = _fetch_pages(client, key, [url])
+            if not notice_pages:
+                raise RuntimeError("TinyFish could not read the official tender page.")
+            notice = notice_pages[0]
+            corrigenda = []
+            for link in _link_items(notice):
+                if isinstance(link, str):
+                    link_url, label = link, link
+                elif isinstance(link, dict):
+                    link_url = str(link.get("url") or link.get("href") or "")
+                    label = str(link.get("text") or link.get("title") or link.get("label") or link_url)
+                else:
+                    continue
+                if is_official_url(link_url) and re.search(r"corrig|amend|addend", (label + " " + link_url), re.I):
+                    corrigenda.append((link_url, label))
+            corr_pages = _fetch_pages(client, key, list(dict.fromkeys(url for url, _ in corrigenda))[:5]) if corrigenda else []
+    except httpx.HTTPStatusError as exc:
+        raise RuntimeError("TinyFish document reader returned HTTP " + str(exc.response.status_code) + ".") from exc
+    except httpx.TimeoutException as exc:
+        raise RuntimeError("Reading the official documents timed out. Open the official notice link directly.") from exc
+    except httpx.HTTPError as exc:
+        raise RuntimeError("Could not read the official tender documents. Open the official notice link directly.") from exc
+
+    documents = []
+    for page, kind in [(notice, "Tender notice")] + [(page, "Corrigendum / amendment") for page in corr_pages]:
+        doc_url = str(page.get("final_url") or page.get("url") or url)
+        if not is_official_url(doc_url):
+            continue
+        text = str(page.get("text") or "").strip()
+        if is_generic_page(str(page.get("title") or ""), text[:300], doc_url):
+            continue
+        documents.append({
+            "kind": kind,
+            "title": str(page.get("title") or kind)[:240],
+            "url": doc_url,
+            "text": text[:8000],
+        })
+    if not documents:
+        raise RuntimeError("No readable tender notice or corrigendum was returned. Use the official portal link.")
+    return {
+        "tender_id": tender.get("id"),
+        "documents": documents,
+        "notice": "Document text is shown for convenience. The official tender notice and latest corrigendum control; verify dates, eligibility, and all bid terms there.",
+    }
+
+
 def search_tenders(query="active tenders", limit=10):
-    """Search quickly for official tender listings; do not invent missing criteria."""
+    """Find specific official tender pages quickly; do not show generic portal indexes."""
     key = os.getenv("TINYFISH_API_KEY", "").strip()
     if not key:
         raise RuntimeError("TinyFish is not configured. Add TINYFISH_API_KEY to backend .env.")
@@ -104,7 +201,7 @@ def search_tenders(query="active tenders", limit=10):
 
     terms = query.strip() or "active tenders"
     search_query = (
-        f"India active public procurement tenders {terms} "
+        f"India active public procurement tender notice tender ID corrigendum {terms} "
         "site:eprocure.gov.in OR site:*.gov.in OR site:*.nic.in"
     )
     try:
