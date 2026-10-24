@@ -109,6 +109,9 @@ def bidder_history(tender_id: str):
     if not tender:
         raise HTTPException(status_code=404, detail="Tender not found")
     submitted = [b for b in BID_SUBMISSIONS if b["tender_id"] == tender_id]
+    # TinyFish provider seam: connect here after confirming the authorized API schema,
+    # credentials, source URLs, and supplier-identity matching requirements.
+    # Do not infer performance from a name-only match.
     bidders = [{
         "bidder_id": b["bid_id"],
         "name": b["bidder_name"],
