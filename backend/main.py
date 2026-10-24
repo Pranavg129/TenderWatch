@@ -38,6 +38,32 @@ DEMO_TENDERS: list[dict[str, Any]] = [
     }
 ]
 
+
+# Fictional contract-history records for demonstrating the buyer workspace.
+# Replace this provider with an authorized procurement-system source before production.
+DEMO_BIDDER_HISTORY: dict[str, list[dict[str, Any]]] = {
+    "TW-2026-003": [
+        {
+            "bidder_id": "demo-supplier-a", "name": "Sample Supplier A",
+            "contracts": [
+                {"buyer": "Demo Municipal Unit", "scope": "LED components", "value_inr": 420000, "outcome": "Completed", "delivery": "On time"},
+                {"buyer": "Demo Public Works Office", "scope": "Electrical fittings", "value_inr": 310000, "outcome": "Completed", "delivery": "On time"},
+                {"buyer": "Demo Urban Services Dept.", "scope": "Street-light spares", "value_inr": 275000, "outcome": "Completed", "delivery": "Delayed"},
+            ],
+        },
+        {
+            "bidder_id": "demo-supplier-b", "name": "Sample Supplier B",
+            "contracts": [
+                {"buyer": "Demo District Office", "scope": "Electrical supplies", "value_inr": 190000, "outcome": "Completed", "delivery": "On time"},
+            ],
+        },
+        {
+            "bidder_id": "demo-supplier-c", "name": "Sample Supplier C",
+            "contracts": [],
+        },
+    ],
+}
+
 class BusinessProfile(BaseModel):
     annual_turnover_inr: float = Field(default=3000000, ge=0)
     years_experience: int = Field(default=2, ge=0)
