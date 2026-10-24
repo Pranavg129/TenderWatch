@@ -114,6 +114,38 @@ def eligibility(tender_id: str, profile: BusinessProfile):
             "total": len(checks), "status": "Potential match" if passed == len(checks) else "Review required",
             "notice": "Preliminary screening only. Official tender documents and amendments take precedence."}
 
+
+@app.get("/api/bidders/history/{tender_id}")
+def bidder_history(tender_id: str):
+    """Return clearly labeled fictional bidder-history data for the demo workspace."""
+    tender = next((t for t in DEMO_TENDERS if t["id"] == tender_id), None)
+    if not tender:
+        raise HTTPException(status_code=404, detail="Tender not found")
+    bidders = []
+    for bidder in DEMO_BIDDER_HISTORY.get(tender_id, []):
+        contracts = bidder["contracts"]
+        completed = sum(1 for c in contracts if c["outcome"] == "Completed")
+        on_time = sum(1 for c in contracts if c["delivery"] == "On time")
+        bidders.append({
+            "bidder_id": bidder["bidder_id"],
+            "name": bidder["name"],
+            "contract_count": len(contracts),
+            "completed_count": completed,
+            "on_time_count": on_time,
+            "delayed_count": sum(1 for c in contracts if c["delivery"] == "Delayed"),
+            "contracts": contracts,
+            "coverage": "Sample records available" if contracts else "No sample records available",
+        })
+    return {
+        "tender_id": tender_id,
+        "source": "Fictional TenderWatch demo records",
+        "is_synthetic": True,
+        "records_verified": False,
+        "checked_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+        "bidders": bidders,
+        "notice": "Illustrative history only. No real procurement or performance records were fetched. Do not use this demo data to rank, shortlist, or disqualify suppliers.",
+    }
+
 @app.get("/api/tinyfish/status")
 def tinyfish_status():
     # Do not expose secrets. Live integration requires verified API docs and configured credentials.
