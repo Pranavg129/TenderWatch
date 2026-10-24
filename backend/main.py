@@ -103,7 +103,7 @@ def refresh_tenders(request: TenderSearch):
                 "No specific tender notice from an official .gov.in or .nic.in page matched this search. "
                 "General portal pages are ignored; try a department, item, or tender-reference keyword."
                 if not LIVE_TENDERS else
-                "Details are extracted from official tender pages where readable; verify the notice and latest corrigenda."
+                "Some details may be extracted when an official page is readable; verify the notice and latest corrigenda."
             )}
 
 @app.get("/api/tenders/{tender_id}/documents")
