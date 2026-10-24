@@ -39,47 +39,6 @@ DEMO_TENDERS: list[dict[str, Any]] = [
 ]
 
 
-# Fictional contract-history records for demonstrating the buyer workspace.
-# Replace this provider with an authorized procurement-system source before production.
-DEMO_BIDDER_HISTORY: dict[str, list[dict[str, Any]]] = {
-    "TW-2026-001": [
-        {"bidder_id": "demo-office-a", "name": "Sample Office Supplier A", "contracts": [
-            {"buyer": "Demo District Secretariat", "scope": "Office consumables", "value_inr": 360000, "outcome": "Completed", "delivery": "On time"},
-            {"buyer": "Demo Public College", "scope": "Computer accessories", "value_inr": 280000, "outcome": "Completed", "delivery": "On time"},
-        ]},
-        {"bidder_id": "demo-office-b", "name": "Sample Office Supplier B", "contracts": [
-            {"buyer": "Demo Block Office", "scope": "Stationery supply", "value_inr": 95000, "outcome": "Completed", "delivery": "Delayed"},
-        ]},
-    ],
-    "TW-2026-002": [
-        {"bidder_id": "demo-network-a", "name": "Sample Network Services A", "contracts": [
-            {"buyer": "Demo IT Cell", "scope": "LAN maintenance", "value_inr": 540000, "outcome": "Completed", "delivery": "On time"},
-            {"buyer": "Demo Training Centre", "scope": "Router maintenance", "value_inr": 220000, "outcome": "Completed", "delivery": "On time"},
-        ]},
-        {"bidder_id": "demo-network-b", "name": "Sample Network Services B", "contracts": []},
-    ],
-    "TW-2026-003": [
-        {
-            "bidder_id": "demo-supplier-a", "name": "Sample Supplier A",
-            "contracts": [
-                {"buyer": "Demo Municipal Unit", "scope": "LED components", "value_inr": 420000, "outcome": "Completed", "delivery": "On time"},
-                {"buyer": "Demo Public Works Office", "scope": "Electrical fittings", "value_inr": 310000, "outcome": "Completed", "delivery": "On time"},
-                {"buyer": "Demo Urban Services Dept.", "scope": "Street-light spares", "value_inr": 275000, "outcome": "Completed", "delivery": "Delayed"},
-            ],
-        },
-        {
-            "bidder_id": "demo-supplier-b", "name": "Sample Supplier B",
-            "contracts": [
-                {"buyer": "Demo District Office", "scope": "Electrical supplies", "value_inr": 190000, "outcome": "Completed", "delivery": "On time"},
-            ],
-        },
-        {
-            "bidder_id": "demo-supplier-c", "name": "Sample Supplier C",
-            "contracts": [],
-        },
-    ],
-}
-
 BID_SUBMISSIONS: list[dict[str, Any]] = []
 
 class BidSubmission(BaseModel):
@@ -145,35 +104,31 @@ def eligibility(tender_id: str, profile: BusinessProfile):
 
 @app.get("/api/bidders/history/{tender_id}")
 def bidder_history(tender_id: str):
-    """Return clearly labeled fictional bidder-history data for the demo workspace."""
+    """Show history slots only for bidders who actually submitted for this tender."""
     tender = next((t for t in DEMO_TENDERS if t["id"] == tender_id), None)
     if not tender:
         raise HTTPException(status_code=404, detail="Tender not found")
-    bidders = []
-    for bidder in DEMO_BIDDER_HISTORY.get(tender_id, []):
-        contracts = bidder["contracts"]
-        completed = sum(1 for c in contracts if c["outcome"] == "Completed")
-        on_time = sum(1 for c in contracts if c["delivery"] == "On time")
-        bidders.append({
-            "bidder_id": bidder["bidder_id"],
-            "name": bidder["name"],
-            "contract_count": len(contracts),
-            "completed_count": completed,
-            "on_time_count": on_time,
-            "delayed_count": sum(1 for c in contracts if c["delivery"] == "Delayed"),
-            "contracts": contracts,
-            "coverage": "Sample records available" if contracts else "No sample records available",
-        })
+    submitted = [b for b in BID_SUBMISSIONS if b["tender_id"] == tender_id]
+    bidders = [{
+        "bidder_id": b["bid_id"],
+        "name": b["bidder_name"],
+        "contract_count": 0,
+        "completed_count": 0,
+        "on_time_count": 0,
+        "delayed_count": 0,
+        "contracts": [],
+        "coverage": "No verified history source connected",
+    } for b in submitted]
+    from datetime import datetime, timezone
     return {
         "tender_id": tender_id,
-        "source": "Fictional TenderWatch demo records",
-        "is_synthetic": True,
+        "source": "No verified external performance source connected",
+        "is_synthetic": False,
         "records_verified": False,
-        "checked_at": __import__("datetime").datetime.now(__import__("datetime").timezone.utc).isoformat(),
+        "checked_at": datetime.now(timezone.utc).isoformat(),
         "bidders": bidders,
-        "notice": "Illustrative history only. No real procurement or performance records were fetched. Do not use this demo data to rank, shortlist, or disqualify suppliers.",
+        "notice": "This endpoint does not fetch real contract-performance records. A missing history record is unknown, not a negative rating.",
     }
-
 
 @app.get("/api/bids")
 def list_bids(tender_id: str | None = None):
