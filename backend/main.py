@@ -42,6 +42,22 @@ DEMO_TENDERS: list[dict[str, Any]] = [
 # Fictional contract-history records for demonstrating the buyer workspace.
 # Replace this provider with an authorized procurement-system source before production.
 DEMO_BIDDER_HISTORY: dict[str, list[dict[str, Any]]] = {
+    "TW-2026-001": [
+        {"bidder_id": "demo-office-a", "name": "Sample Office Supplier A", "contracts": [
+            {"buyer": "Demo District Secretariat", "scope": "Office consumables", "value_inr": 360000, "outcome": "Completed", "delivery": "On time"},
+            {"buyer": "Demo Public College", "scope": "Computer accessories", "value_inr": 280000, "outcome": "Completed", "delivery": "On time"},
+        ]},
+        {"bidder_id": "demo-office-b", "name": "Sample Office Supplier B", "contracts": [
+            {"buyer": "Demo Block Office", "scope": "Stationery supply", "value_inr": 95000, "outcome": "Completed", "delivery": "Delayed"},
+        ]},
+    ],
+    "TW-2026-002": [
+        {"bidder_id": "demo-network-a", "name": "Sample Network Services A", "contracts": [
+            {"buyer": "Demo IT Cell", "scope": "LAN maintenance", "value_inr": 540000, "outcome": "Completed", "delivery": "On time"},
+            {"buyer": "Demo Training Centre", "scope": "Router maintenance", "value_inr": 220000, "outcome": "Completed", "delivery": "On time"},
+        ]},
+        {"bidder_id": "demo-network-b", "name": "Sample Network Services B", "contracts": []},
+    ],
     "TW-2026-003": [
         {
             "bidder_id": "demo-supplier-a", "name": "Sample Supplier A",
@@ -63,6 +79,18 @@ DEMO_BIDDER_HISTORY: dict[str, list[dict[str, Any]]] = {
         },
     ],
 }
+
+BID_SUBMISSIONS: list[dict[str, Any]] = []
+
+class BidSubmission(BaseModel):
+    bidder_name: str = Field(min_length=2, max_length=120)
+    offer_amount_inr: float = Field(gt=0)
+    technical_summary: str = Field(min_length=10, max_length=2000)
+    prepared_documents: list[str] = Field(default_factory=list)
+    confirms_tender_terms: bool = False
+
+class BidStatusUpdate(BaseModel):
+    status: str
 
 class BusinessProfile(BaseModel):
     annual_turnover_inr: float = Field(default=3000000, ge=0)
@@ -145,6 +173,45 @@ def bidder_history(tender_id: str):
         "bidders": bidders,
         "notice": "Illustrative history only. No real procurement or performance records were fetched. Do not use this demo data to rank, shortlist, or disqualify suppliers.",
     }
+
+
+@app.get("/api/bids")
+def list_bids(tender_id: str | None = None):
+    """List demo bid submissions, optionally for one sample tender."""
+    items = BID_SUBMISSIONS
+    if tender_id:
+        items = [b for b in items if b["tender_id"] == tender_id]
+    return {"items": items, "count": len(items), "demo": True}
+
+@app.post("/api/bids/{tender_id}")
+def submit_bid(tender_id: str, bid: BidSubmission):
+    """Store a demo bid in memory; this does not submit to a government portal."""
+    if not any(t["id"] == tender_id for t in DEMO_TENDERS):
+        raise HTTPException(status_code=404, detail="Tender not found")
+    if not bid.confirms_tender_terms:
+        raise HTTPException(status_code=400, detail="Confirm the sample tender terms before submitting")
+    from datetime import datetime, timezone
+    bid_id = tender_id + "-BID-" + str(len(BID_SUBMISSIONS) + 1).zfill(3)
+    record = {
+        "bid_id": bid_id, "tender_id": tender_id, "bidder_name": bid.bidder_name,
+        "offer_amount_inr": bid.offer_amount_inr, "technical_summary": bid.technical_summary,
+        "prepared_documents": bid.prepared_documents, "status": "Received (demo)",
+        "submitted_at": datetime.now(timezone.utc).isoformat(),
+        "is_demo_submission": True,
+    }
+    BID_SUBMISSIONS.append(record)
+    return record
+
+@app.patch("/api/bids/{bid_id}/status")
+def update_bid_status(bid_id: str, update: BidStatusUpdate):
+    allowed = {"Received (demo)", "Under review", "Clarification needed", "Evaluated"}
+    if update.status not in allowed:
+        raise HTTPException(status_code=400, detail="Unsupported demo review status")
+    bid = next((b for b in BID_SUBMISSIONS if b["bid_id"] == bid_id), None)
+    if not bid:
+        raise HTTPException(status_code=404, detail="Bid not found")
+    bid["status"] = update.status
+    return bid
 
 @app.get("/api/tinyfish/status")
 def tinyfish_status():
