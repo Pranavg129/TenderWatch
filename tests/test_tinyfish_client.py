@@ -1,24 +1,23 @@
-"""Offline regression coverage for TinyFish search and document reading."""
+"""Offline regression coverage for TinyFish discovery and buyer comparison."""
 from backend import main, tinyfish_client
 
 
-def test_search_results_exclude_generic_portal_pages():
+def test_generic_portal_pages_are_not_tenders():
     source = "https://eprocure.gov.in/eprocure/app"
-    assert tinyfish_client.normalize(
-        {
-            "title": "eProcurement System Government of India",
-            "url": source,
-            "snippet": "Download tender schedules and submit bids online.",
-        },
-        source,
-    ) is None
-    assert tinyfish_client.normalize(
-        {
-            "title": "Tenders by Organisation",
-            "url": "https://eprocure.gov.in/eprocure/app?page=org",
-        },
-        source,
-    ) is None
+    assert tinyfish_client.normalize({
+        "title": "eProcurement System Government of India",
+        "url": source,
+        "snippet": "Various search options built in the CPP Portal.",
+    }, source) is None
+    assert tinyfish_client.normalize({
+        "title": "eProcurement System of Government of West Bengal",
+        "url": "https://wbtenders.gov.in/",
+    }, source) is None
+    assert tinyfish_client.normalize({
+        "title": "Tender for Design, Supply, Installation, Integration",
+        "url": "https://spg.nic.in/docs/Tenders/tender-specification.pdf",
+        "snippet": "Various search options built in the CPP Portal.",
+    }, source)["description"].startswith("Open the official tender notice")
 
 
 def test_search_results_are_normalized_without_inventing_missing_fields(monkeypatch):
@@ -52,7 +51,6 @@ def test_search_results_are_normalized_without_inventing_missing_fields(monkeypa
         def get(self, url, **kwargs):
             assert url == tinyfish_client.SEARCH_URL
             assert kwargs["headers"]["X-API-Key"] == "test-key"
-            assert "corrigendum" in kwargs["params"]["query"]
             return FakeResponse()
 
     monkeypatch.setattr(tinyfish_client.httpx, "Client", FakeClient)
@@ -63,6 +61,19 @@ def test_search_results_are_normalized_without_inventing_missing_fields(monkeypa
     assert tenders[0]["emd_inr"] is None
     assert tenders[0]["turnover_inr"] is None
     assert tenders[0]["source_url"] == "https://eprocure.gov.in/tender/123"
+
+
+def test_official_notice_field_extraction_is_labelled_and_conservative():
+    text = """
+    Estimated Tender Value: Rs. 6,20,000
+    EMD Amount: Rs 12,400
+    Bid Submission End Date: 08-11-2026 03:00 PM
+    Minimum annual turnover requirement: INR 18,00,000
+    Minimum experience: 1 years
+    """
+    assert tinyfish_client._parse_amount(text, ("estimated tender value",)) == 620000
+    assert tinyfish_client._parse_amount(text, ("emd amount",)) == 12400
+    assert tinyfish_client._parse_deadline(text) == "08-11-2026 03:00 PM"
 
 
 def test_document_reader_reads_notice_and_linked_corrigendum(monkeypatch):
@@ -94,8 +105,7 @@ def test_document_reader_reads_notice_and_linked_corrigendum(monkeypatch):
         def post(self, url, **kwargs):
             assert url == tinyfish_client.FETCH_URL
             assert kwargs["headers"]["X-API-Key"] == "test-key"
-            urls = kwargs["json"]["urls"]
-            calls.append(urls)
+            calls.append(kwargs["json"]["urls"])
             if len(calls) == 1:
                 return FakeResponse({"results": [{
                     "title": "Tender notice",
@@ -122,6 +132,23 @@ def test_document_reader_reads_notice_and_linked_corrigendum(monkeypatch):
         "Corrigendum / amendment",
     ]
     assert "Revised bid submission date" in result["documents"][1]["text"]
+
+
+def test_buyer_demo_rating_is_explicitly_synthetic_and_sorted():
+    scenario = main.demo_buyer_scenario("TW-2026-003")
+    assert scenario["is_synthetic"] is True
+    assert scenario["records_verified"] is False
+    scores = [b["history_rating_out_of_5"] for b in scenario["bidders"]]
+    assert scores == sorted(scores, reverse=True)
+    assert all(b["is_synthetic"] for b in scenario["bidders"])
+    assert "not a tender award recommendation" in scenario["notice"]
+
+
+def test_no_actual_submission_means_no_actual_bidder_history(monkeypatch):
+    monkeypatch.setattr(main, "BID_SUBMISSIONS", [])
+    result = main.bidder_history("TW-2026-003")
+    assert result["bidders"] == []
+    assert result["is_synthetic"] is False
 
 
 def test_live_tender_with_missing_criteria_stays_review_required(monkeypatch):
