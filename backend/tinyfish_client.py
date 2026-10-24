@@ -277,9 +277,9 @@ def search_cppp_award_history(bidder_name, limit=5):
     name = " ".join(str(bidder_name or "").split())
     key = os.getenv("TINYFISH_API_KEY", "").strip()
     if not key:
-        return []
+        raise RuntimeError("TinyFish is not configured; CPPP award lookup is unavailable.")
     if len(name) < 3:
-        return []
+        raise RuntimeError("Enter the bidder full legal name to search CPPP awards.")
     query = f'"{name}" site:eprocure.gov.in/cppp/resultoftenders'
     try:
         with httpx.Client(timeout=httpx.Timeout(18.0, connect=6.0)) as client:
@@ -341,8 +341,8 @@ def search_cppp_award_history(bidder_name, limit=5):
             for record in award_rows:
                 deduped[record["url"]] = record
             return list(deduped.values())[:max(1, min(limit, 5))]
-    except (httpx.HTTPError, json.JSONDecodeError):
-        return []
+    except (httpx.HTTPError, json.JSONDecodeError) as exc:
+        raise RuntimeError("CPPP award lookup failed through TinyFish. Retry later or open CPPP directly.") from exc
 
 
 def read_tender_documents(tender):
