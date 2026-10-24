@@ -3,7 +3,10 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from backend import tinyfish_client\nfrom dotenv import load_dotenv\n\nload_dotenv()
+from backend import tinyfish_client
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI(title="TenderWatch API", version="0.1.0",
               description="MVP API for MSME tender discovery and eligibility screening.")
