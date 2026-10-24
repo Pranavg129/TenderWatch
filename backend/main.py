@@ -3,7 +3,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
-from backend import tinyfish_client
+from backend import tinyfish_client\nfrom dotenv import load_dotenv\n\nload_dotenv()
 
 app = FastAPI(title="TenderWatch API", version="0.1.0",
               description="MVP API for MSME tender discovery and eligibility screening.")
@@ -133,7 +133,7 @@ def eligibility(tender_id: str, profile: BusinessProfile):
 @app.get("/api/bidders/history/{tender_id}")
 def bidder_history(tender_id: str):
     """Show history slots only for bidders who actually submitted for this tender."""
-    tender = next((t for t in DEMO_TENDERS if t["id"] == tender_id), None)
+    tender = find_tender(tender_id)
     if not tender:
         raise HTTPException(status_code=404, detail="Tender not found")
     submitted = [b for b in BID_SUBMISSIONS if b["tender_id"] == tender_id]
