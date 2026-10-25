@@ -37,6 +37,13 @@ footer{max-width:1180px;margin:20px auto;padding:0 20px 28px;color:var(--muted);
 .bidder-section-kicker{font-size:10px;font-weight:800;letter-spacing:1.3px;color:#568171}
 .bidder-total{display:flex;align-items:center;gap:9px;padding:7px 12px;border:1px solid #d8e7e1;border-radius:12px;background:#fff;color:var(--muted);font-size:12px}
 .bidder-total strong{font-size:21px;line-height:1;color:var(--brand)}
+.bidder-panel-actions{display:flex;align-items:center;justify-content:flex-end;gap:8px;flex-wrap:wrap}
+.bidder-sample-button{padding:8px 11px;font-size:12px}
+.bidder-empty{display:flex;align-items:center;gap:13px;margin-top:14px;padding:16px;border:1px dashed #c8ded3;border-radius:12px;background:#f8fbf9}
+.bidder-empty-icon{display:grid;place-items:center;flex:none;width:38px;height:38px;border-radius:12px;background:#e7f4ed;color:#277257;font-size:20px}
+.bidder-empty strong{color:#183c30}
+.bidder-empty p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.bidder-empty button{margin-left:auto}
 .bidder-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin-top:14px}
 .bidder-card{position:relative;overflow:hidden;display:flex;flex-direction:column;min-width:0;padding:17px;border:1px solid #dce8e3;border-radius:15px;background:linear-gradient(150deg,#fff 58%,#f6faf8);box-shadow:0 7px 20px #152e260a;transition:transform .18s ease,box-shadow .18s ease,border-color .18s ease}
 .bidder-card::before{content:"";position:absolute;inset:0 0 auto;height:4px;background:linear-gradient(90deg,#176b57,#59b897,#c9e9dc)}
@@ -72,7 +79,6 @@ footer{max-width:1180px;margin:20px auto;padding:0 20px 28px;color:var(--muted);
 .award-record{margin-top:8px;padding-top:8px;border-top:1px solid var(--line)}
 .award-record summary{cursor:pointer;font-weight:650}
 .award-record small{display:block;margin-top:5px;color:var(--muted)}
-.sample-tools .buyer-intro{margin:8px 0}
 @media(max-width:760px){.bidder-grid{grid-template-columns:1fr}.bidder-card{padding:15px}.buyer-selector select{flex:1;min-width:220px;max-width:100%}}
-@media(max-width:600px){.bidder-card-bottom{align-items:flex-start}.bidder-review-control{min-width:135px}.bidder-total{padding:6px 9px}}
+@media(max-width:600px){.bidder-card-bottom{align-items:flex-start}.bidder-review-control{min-width:135px}.bidder-total{padding:6px 9px}.bidder-list-title{align-items:flex-start}.bidder-panel-actions{align-items:flex-end;flex-direction:column}.bidder-empty{align-items:flex-start;flex-wrap:wrap}.bidder-empty button{margin:0 0 0 51px}}
 @media(prefers-reduced-motion:reduce){.bidder-card{transition:none}.bidder-card:hover{transform:none}}

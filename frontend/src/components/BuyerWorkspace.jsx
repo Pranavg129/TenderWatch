@@ -33,8 +33,12 @@ function BidderHistory({ data }) {
   </div>;
 }
 
-function SubmittedBids({ bids, onStatusChange, synthetic }) {
-  if (!bids.length) return <div className="empty">No demo bids for this tender yet.</div>;
+function SubmittedBids({ bids, onStatusChange, onLoadSamples, synthetic }) {
+  if (!bids.length) return <div className="bidder-empty">
+    <span className="bidder-empty-icon" aria-hidden="true">✦</span>
+    <div><strong>No demo bids yet</strong><p>Preview the review screen with fictional bidder examples.</p></div>
+    <button type="button" className="secondary-button" onClick={onLoadSamples}>Load example bidders</button>
+  </div>;
 
   return <div className="bidder-grid">
     {bids.map((bid, index) => {
@@ -85,11 +89,14 @@ export default function BuyerWorkspace({ tenders, tenderId, onTenderChange, hist
     <section className="bidder-review-panel" aria-labelledby="submitted-bids-title">
       <div className="bidder-list-title">
         <div><span className="bidder-section-kicker">TENDER RESPONSE</span><h3 id="submitted-bids-title">Submitted bids</h3></div>
-        <span className="bidder-total"><strong>{bids.length}</strong><span>{bids.length === 1 ? "bid received" : "bids received"}</span></span>
+        <div className="bidder-panel-actions">
+          <span className="bidder-total"><strong>{bids.length}</strong><span>{bids.length === 1 ? "bid received" : "bids received"}</span></span>
+          {!history?.is_synthetic && <button type="button" className="secondary-button bidder-sample-button" onClick={onLoadSamples}>Load fictional examples</button>}
+        </div>
       </div>
       <p className="buyer-intro">Review each offer against the tender’s published criteria. Expand a card only when you need the technical summary or checklist.</p>
       {history?.is_synthetic && <div className="review-summary">The bidders and offers shown are fictional examples; they are not real submissions.</div>}
-      <SubmittedBids bids={bids} onStatusChange={onStatusChange} synthetic={Boolean(history?.is_synthetic)} />
+      <SubmittedBids bids={bids} onStatusChange={onStatusChange} onLoadSamples={onLoadSamples} synthetic={Boolean(history?.is_synthetic)} />
     </section>
 
     <details className="evidence-disclosure">
@@ -100,11 +107,6 @@ export default function BuyerWorkspace({ tenders, tenderId, onTenderChange, hist
       <BidderHistory data={history} />
     </details>
 
-    {!history?.is_synthetic && <details className="evidence-disclosure sample-tools">
-      <summary>Need example data for a demonstration?</summary>
-      <p className="buyer-intro">Load fictional bidders and offers to preview the layout. They are clearly marked and do not represent real suppliers.</p>
-      <button type="button" className="secondary-button" onClick={onLoadSamples}>Load fictional example</button>
-    </details>}
     <p className="review-disclaimer">Bid status changes are temporary and reset when the demo backend restarts. A human reviewer remains responsible for the decision.</p>
   </section>;
 }
