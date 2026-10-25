@@ -9,7 +9,9 @@ Suggested walkthrough:
 2. Show the extracted tender details and source/reference.
 3. Compare the tender requirements with a sample business profile.
 4. Review the resulting eligibility explanation and missing information.
-5. Show how a corrigendum or changed deadline should be highlighted, if that workflow is implemented.
+5. Open the buyer review workspace and show the fictional bidder-history examples that load when no demo bids exist.
+6. If TinyFish is configured and actual TenderWatch demo bids exist, show the CPPP name-search evidence attached to each bidder. Explain that these are unverified name matches, not a trustworthiness decision.
+7. Show how a corrigendum or changed deadline should be highlighted, if that workflow is implemented.
 
 Only demonstrate steps that work in the current build. If a step is mocked or uses sample data, say so explicitly.
 
@@ -30,8 +32,11 @@ Only demonstrate steps that work in the current build. If a step is mocked or us
 - Show source links and the time of retrieval for live data when available.
 - Treat extracted eligibility as decision support, not a guarantee of qualification.
 - Distinguish verified source facts, extracted fields, and AI-generated summaries.
+- Label all sample bidder names, contracts, outcomes, and offers as fictional; do not calculate or imply a trustworthiness score from them.
+- Treat TinyFish CPPP results as name-only source evidence. Verify legal identity and source records; a missing match means unknown, and a human reviewer remains responsible for any decision.
 - Do not submit bids or take external actions without explicit user review.
 
 ## Current implementation status
 
 This file is a checklist, not evidence that each capability is implemented. Update this section as the team verifies working features and tests.
+

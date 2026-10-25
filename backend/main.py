@@ -3,6 +3,10 @@ from typing import Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
+from backend import tinyfish_client
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI(title="TenderWatch API", version="0.1.0",
               description="MVP API for MSME tender discovery and eligibility screening.")
@@ -38,6 +42,23 @@ DEMO_TENDERS: list[dict[str, Any]] = [
     }
 ]
 
+
+BID_SUBMISSIONS: list[dict[str, Any]] = []
+LIVE_TENDERS: list[dict[str, Any]] = []
+
+def find_tender(tender_id: str):
+    return next((t for t in DEMO_TENDERS + LIVE_TENDERS if t['id'] == tender_id), None)
+
+class BidSubmission(BaseModel):
+    bidder_name: str = Field(min_length=2, max_length=120)
+    offer_amount_inr: float = Field(gt=0)
+    technical_summary: str = Field(min_length=10, max_length=2000)
+    prepared_documents: list[str] = Field(default_factory=list)
+    confirms_tender_terms: bool = False
+
+class BidStatusUpdate(BaseModel):
+    status: str
+
 class BusinessProfile(BaseModel):
     annual_turnover_inr: float = Field(default=3000000, ge=0)
     years_experience: int = Field(default=2, ge=0)
@@ -51,46 +72,239 @@ def root():
 
 @app.get("/api/health")
 def health():
-    return {"status": "healthy", "tinyfish_configured": False,
-            "note": "TinyFish credentials and endpoint must be configured before live extraction."}
+    return {"status": "healthy", "tinyfish_configured": tinyfish_client.status()["configured"],
+            "note": "TinyFish fetches public tenders when configured; bids stay inside this demo backend."}
 
 @app.get("/api/tenders")
 def list_tenders(q: str = "", category: str = "All"):
-    items = DEMO_TENDERS
+    items = DEMO_TENDERS + LIVE_TENDERS
     if q.strip():
         needle = q.strip().lower()
         items = [t for t in items if needle in (t["title"] + " " + t["buyer"] + " " + t["location"] + " " + t["description"]).lower()]
     if category != "All":
         items = [t for t in items if t["category"].lower() == category.lower()]
-    return {"items": items, "count": len(items), "demo": True}
+    return {"items": items, "count": len(items), "demo": not bool(LIVE_TENDERS), "live_count": len(LIVE_TENDERS)}
 
-@app.post("/api/eligibility/{tender_id}")
-def eligibility(tender_id: str, profile: BusinessProfile):
-    tender = next((t for t in DEMO_TENDERS if t["id"] == tender_id), None)
+class TenderSearch(BaseModel):
+    query: str = Field(default="active tenders", max_length=160)
+    limit: int = Field(default=10, ge=1, le=15)
+
+@app.post("/api/tenders/refresh")
+def refresh_tenders(request: TenderSearch):
+    """Fetch public tender listings; bid submission remains internal."""
+    global LIVE_TENDERS
+    try:
+        LIVE_TENDERS = tinyfish_client.search_tenders(request.query, request.limit)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    return {"items": LIVE_TENDERS, "count": len(LIVE_TENDERS),
+            "source": "TinyFish public extraction",
+            "notice": (
+                "No specific tender notice from an official .gov.in or .nic.in page matched this search. "
+                "General portal pages are ignored; try a department, item, or tender-reference keyword."
+                if not LIVE_TENDERS else
+                "Some details may be extracted when an official page is readable; verify the notice and latest corrigenda."
+            )}
+
+@app.get("/api/tenders/{tender_id}/documents")
+def tender_documents(tender_id: str):
+    """Read the public tender notice and linked corrigenda on demand."""
+    tender = find_tender(tender_id)
     if not tender:
         raise HTTPException(status_code=404, detail="Tender not found")
-    checks = [
-        {"name": "Annual turnover", "required": f"₹{tender['turnover_inr']:,.0f}",
-         "provided": f"₹{profile.annual_turnover_inr:,.0f}",
-         "pass": profile.annual_turnover_inr >= tender["turnover_inr"]},
-        {"name": "Relevant experience", "required": f"{tender['years_experience']} years",
-         "provided": f"{profile.years_experience} years",
-         "pass": profile.years_experience >= tender["years_experience"]},
-        {"name": "Category match", "required": tender["category"],
-         "provided": ", ".join(profile.categories),
-         "pass": any(c.lower() == tender["category"].lower() for c in profile.categories)},
-        {"name": "EMD capacity", "required": f"₹{tender['emd_inr']:,.0f}",
-         "provided": f"₹{profile.available_emd_inr:,.0f}",
-         "pass": profile.available_emd_inr >= tender["emd_inr"]},
-    ]
-    passed = sum(1 for c in checks if c["pass"])
-    return {"tender_id": tender_id, "checks": checks, "passed": passed,
-            "total": len(checks), "status": "Potential match" if passed == len(checks) else "Review required",
-            "notice": "Preliminary screening only. Official tender documents and amendments take precedence."}
+    try:
+        return tinyfish_client.read_tender_documents(tender)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
 
 @app.get("/api/tinyfish/status")
 def tinyfish_status():
-    # Do not expose secrets. Live integration requires verified API docs and configured credentials.
-    import os
-    return {"configured": bool(os.getenv("TINYFISH_API_KEY") and os.getenv("TINYFISH_API_URL")),
-            "mode": "integration-ready", "live_extraction_enabled": False}
+    return tinyfish_client.status()
+
+@app.post("/api/eligibility/{tender_id}")
+def eligibility(tender_id: str, profile: BusinessProfile):
+    tender = find_tender(tender_id)
+    if not tender:
+        raise HTTPException(status_code=404, detail="Tender not found")
+    turnover = tender.get("turnover_inr")
+    experience = tender.get("years_experience")
+    emd = tender.get("emd_inr")
+    checks = [
+        {"name": "Annual turnover", "required": f"₹{turnover:,.0f}" if turnover is not None else "Not listed in extracted data",
+         "provided": f"₹{profile.annual_turnover_inr:,.0f}",
+         "pass": turnover is not None and profile.annual_turnover_inr >= turnover},
+        {"name": "Relevant experience", "required": f"{experience:g} years" if experience is not None else "Not listed in extracted data",
+         "provided": f"{profile.years_experience} years",
+         "pass": experience is not None and profile.years_experience >= experience},
+        {"name": "Category match", "required": tender.get("category") or "Not listed",
+         "provided": ", ".join(profile.categories),
+         "pass": bool(tender.get("category")) and any(c.lower() == tender["category"].lower() for c in profile.categories)},
+        {"name": "EMD capacity", "required": f"₹{emd:,.0f}" if emd is not None else "Not listed in extracted data",
+         "provided": f"₹{profile.available_emd_inr:,.0f}",
+         "pass": emd is not None and profile.available_emd_inr >= emd},
+    ]
+    passed = sum(1 for c in checks if c["pass"])
+    return {"tender_id": tender_id, "checks": checks, "passed": passed, "total": len(checks),
+            "status": "Potential match" if passed == len(checks) else ("Likely not eligible" if passed == 0 and all("Not listed" not in c["required"] for c in checks) else "Review required"),
+            "notice": "Preliminary screening only. Extracted data may be incomplete; official tender documents and amendments take precedence."}
+
+
+@app.get("/api/bidders/history/{tender_id}")
+def bidder_history(tender_id: str):
+    """Fetch public CPPP award-name mentions for actual demo bid submitters."""
+    tender = find_tender(tender_id)
+    if not tender:
+        raise HTTPException(status_code=404, detail="Tender not found")
+    submitted = [b for b in BID_SUBMISSIONS if b["tender_id"] == tender_id]
+    from datetime import datetime, timezone
+    bidders = []
+    for bid in submitted:
+        lookup_error = None
+        try:
+            records = tinyfish_client.search_cppp_award_history(bid["bidder_name"])
+        except RuntimeError as exc:
+            records = []
+            lookup_error = str(exc)
+        bidders.append({
+            "bidder_id": bid["bid_id"],
+            "name": bid["bidder_name"],
+            "award_records": records,
+            "award_record_count": len(records),
+            "lookup_error": lookup_error,
+            "coverage": (
+                "CPPP public award records found by name; legal identity is unverified"
+                if records else
+                "Lookup unavailable: " + lookup_error if lookup_error else
+                "No matching public CPPP award result found; this is not a negative performance finding"
+            ),
+            "identity_verified": False,
+            "rating": None,
+        })
+    return {
+        "tender_id": tender_id,
+        "source": "CPPP public Bid Awards search via TinyFish",
+        "tinyfish_configured": tinyfish_client.status()["configured"],
+        "is_synthetic": False,
+        "records_verified": False,
+        "identity_match": "Name-only match; confirm legal entity before relying on a result",
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+        "bidders": bidders,
+        "notice": (
+            "CPPP Bid Awards may show awarded tenders, selected bidder names, bid counts, award dates, and contract values. "
+            "These records do not prove delivery, quality, or completion. Matches are by name only, are not a verified identity, "
+            "and no trust rating is calculated. Missing results mean unknown, not poor performance."
+        ),
+    }
+
+
+@app.get("/api/demo/buyer-scenario/{tender_id}")
+def demo_buyer_scenario(tender_id: str):
+    """Return an explicitly synthetic scenario for demonstrating buyer comparison."""
+    tender = find_tender(tender_id)
+    if not tender:
+        raise HTTPException(status_code=404, detail="Tender not found")
+    from datetime import datetime, timezone
+
+    examples = [
+        {
+            "name": "Northstar Electrical Works (sample)",
+            "contracts": 10, "completed": 10, "on_time": 9,
+            "offer_factor": 0.96, "documents": ["Business registration proof", "Turnover / financial proof", "Relevant work orders", "EMD / exemption proof", "Technical offer"],
+            "summary": "Sample technical approach: staged supply, installation, testing, and handover with a named project lead.",
+            "record": ["Municipal street-light supply · completed on time", "District electrical upgrade · completed; inspection passed"],
+        },
+        {
+            "name": "BrightGrid Systems (sample)",
+            "contracts": 10, "completed": 9, "on_time": 8,
+            "offer_factor": 0.91, "documents": ["Business registration proof", "Turnover / financial proof", "Relevant work orders", "Technical offer"],
+            "summary": "Sample technical approach: delivery in two batches with installation and a maintenance handover plan.",
+            "record": ["Public building lighting · completed", "Road junction upgrade · completed with a schedule extension"],
+        },
+        {
+            "name": "CivicSpark Supplies (sample)",
+            "contracts": 8, "completed": 6, "on_time": 5,
+            "offer_factor": 0.86, "documents": ["Business registration proof", "Relevant work orders", "EMD / exemption proof", "Technical offer"],
+            "summary": "Sample technical approach: supply-first plan with installation subcontract support.",
+            "record": ["Ward lighting replacement · completed", "Electrical component supply · one delayed completion recorded"],
+        },
+    ]
+    bidders = []
+    bids = []
+    value = tender.get("value_inr")
+    for index, item in enumerate(examples, start=1):
+        bidder_id = f"SAMPLE-{tender_id}-{index}"
+        bidders.append({
+            "bidder_id": bidder_id,
+            "name": item["name"],
+            "contract_count": item["contracts"],
+            "completed_count": item["completed"],
+            "on_time_count": item["on_time"],
+            "delayed_count": item["completed"] - item["on_time"],
+            "incomplete_count": item["contracts"] - item["completed"],
+            "contracts": item["record"],
+            "coverage": "Synthetic illustration; not externally verified",
+            "is_synthetic": True,
+        })
+        bids.append({
+            "bid_id": bidder_id + "-BID",
+            "tender_id": tender_id,
+            "bidder_name": item["name"],
+            "offer_amount_inr": round(value * item["offer_factor"]) if value else None,
+            "technical_summary": item["summary"],
+            "prepared_documents": item["documents"],
+            "status": "Received (sample)",
+            "submitted_at": datetime.now(timezone.utc).isoformat(),
+            "is_demo_submission": True,
+            "is_synthetic": True,
+        })
+    return {
+        "tender_id": tender_id,
+        "source": "Illustrative TenderWatch demo fixtures",
+        "is_synthetic": True,
+        "records_verified": False,
+        "bidders": bidders,
+        "bids": bids,
+        "notice": "All bidder names, offers, contract counts, and outcomes in this scenario are fictional examples. They are not connected to TinyFish or public records and do not establish trustworthiness or recommend a tender award.",
+    }
+
+
+@app.get("/api/bids")
+def list_bids(tender_id: str | None = None):
+    """List demo bid submissions, optionally for one sample tender."""
+    items = BID_SUBMISSIONS
+    if tender_id:
+        items = [b for b in items if b["tender_id"] == tender_id]
+    return {"items": items, "count": len(items), "demo": True}
+
+@app.post("/api/bids/{tender_id}")
+def submit_bid(tender_id: str, bid: BidSubmission):
+    """Store a demo bid in memory; this does not submit to a government portal."""
+    if not find_tender(tender_id):
+        raise HTTPException(status_code=404, detail="Tender not found")
+    if not bid.confirms_tender_terms:
+        raise HTTPException(status_code=400, detail="Confirm the sample tender terms before submitting")
+    from datetime import datetime, timezone
+    bid_id = tender_id + "-BID-" + str(len(BID_SUBMISSIONS) + 1).zfill(3)
+    record = {
+        "bid_id": bid_id, "tender_id": tender_id, "bidder_name": bid.bidder_name,
+        "offer_amount_inr": bid.offer_amount_inr, "technical_summary": bid.technical_summary,
+        "prepared_documents": bid.prepared_documents, "status": "Received (demo)",
+        "submitted_at": datetime.now(timezone.utc).isoformat(),
+        "is_demo_submission": True,
+    }
+    BID_SUBMISSIONS.append(record)
+    return record
+
+@app.patch("/api/bids/{bid_id}/status")
+def update_bid_status(bid_id: str, update: BidStatusUpdate):
+    allowed = {"Received (demo)", "Under review", "Clarification needed", "Evaluated"}
+    if update.status not in allowed:
+        raise HTTPException(status_code=400, detail="Unsupported demo review status")
+    bid = next((b for b in BID_SUBMISSIONS if b["bid_id"] == bid_id), None)
+    if not bid:
+        raise HTTPException(status_code=404, detail="Bid not found")
+    bid["status"] = update.status
+    return bid
+
+
