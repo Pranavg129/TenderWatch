@@ -70,11 +70,11 @@ The backend calls TinyFish's documented Web Agent endpoint. The browser never re
 This repository is under active development. Do not assume a feature is complete merely because it appears in the intended workflow above. Verify the current code, tests, and configured data sources before presenting a capability as working.
 
 
-## Demo bid workflow
+## Demo bid and bidder history workflow
 
 **Prepare bid** checks the saved business profile and opens a short tender summary, offer amount, technical offer, and document-readiness checklist. **Submit demo bid** stores the record in the running backend's memory and makes it visible in the buyer review workspace. This is a private TenderWatch demonstration record; it is not sent to CPPP, GeM, or another procurement portal. Restarting the backend clears demo bids.
 
-Bidder history is shown only for suppliers who actually submitted a demo bid for the selected tender. When the buyer review loads, the backend uses TinyFish to search the public CPPP Bid Awards index for exact name mentions and displays matching source snippets and links. These are name-only matches: they do not verify the supplier legal identity, prove delivery or quality, or produce a trust rating. CPPP award data can show details such as selected bidder, bid count, award date, and contract value where published. A missing record means unknown, not poor performance. The current demo stores bid submissions in memory and searches CPPP on demand; production use needs official integration approval, stronger legal-entity matching, caching, and a transparent performance-evaluation policy.
+When no demo submissions exist, the buyer workspace automatically loads fictional bidder-history examples so the review screen is populated during a presentation. These examples are clearly labeled and do not calculate or imply a trustworthiness rating. Once actual TenderWatch demo submissions exist, the backend uses TinyFish on demand to search the public CPPP Bid Awards index by bidder name and shows the returned source snippets and links beside each bidder. These are name-only matches: they do not verify legal identity, prove delivery or quality, or determine whether a bidder is trustworthy. A missing result means unknown, not poor performance. The current demo stores bid submissions in memory and searches CPPP on demand; production use needs official integration approval, stronger legal-entity matching, caching, and a transparent performance-evaluation policy.
 
 ## Responsible use
 
@@ -102,3 +102,4 @@ npm run dev
 Open the local URL printed by Vite (normally http://127.0.0.1:5173). Keep the FastAPI backend running in a separate terminal on port 8000; Vite forwards `/api` requests to it. The frontend is no longer served by opening `index.html` directly or using `py -m http.server`.
 
 Create a production bundle with `npm run build` from the `frontend` folder. The generated `frontend/dist` directory is build output and should not be edited by hand.
+

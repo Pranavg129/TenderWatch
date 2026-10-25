@@ -4,45 +4,64 @@ function initials(name) {
   return String(name || "Bidder").trim().split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0].toUpperCase()).join("") || "B";
 }
 
-function BidderHistory({ data }) {
-  const bidders = data?.bidders || [];
-  if (!bidders.length) return <div className="empty">No bidder history is available for this tender.</div>;
+function BidderHistoryEvidence({ entry, synthetic, checkedAt }) {
+  if (!entry) return <section className="bidder-history"><strong>Bidder history</strong><p>History details are not available for this bidder.</p></section>;
 
-  return <div className="evidence-list">
-    {bidders.map(bidder => {
-      const awards = bidder.award_records || [];
-      if (data.is_synthetic) return <article className="evidence-row" key={bidder.bidder_id}>
-        <strong>{bidder.name}</strong>
-        <span className="coverage">Fictional example</span>
-        <p>{bidder.contract_count} sample contracts · {bidder.completed_count} completed · {bidder.on_time_count} on time</p>
-        <p>Illustrative score: {Number(bidder.history_rating_out_of_5 || 0).toFixed(1)} / 5</p>
-        <ul>{(bidder.contracts || []).map(item => <li key={item}>{item}</li>)}</ul>
-      </article>;
+  if (synthetic) return <section className="bidder-history" aria-label="Fictional bidder history example">
+    <div className="history-heading"><strong>Example history</strong><span className="history-badge">Fictional · not verified</span></div>
+    <div className="history-facts">
+      <span><strong>{entry.contract_count}</strong> sample contracts</span>
+      <span><strong>{entry.completed_count}/{entry.contract_count}</strong> completed</span>
+      <span><strong>{entry.on_time_count}</strong> on time</span>
+      <span><strong>{entry.delayed_count}</strong> delayed</span>
+    </div>
+    <p className="history-verdict"><strong>Trustworthiness:</strong> Not assessed from fictional data.</p>
+    <details className="bidder-history-records">
+      <summary>View fictional record examples</summary>
+      <ul>{(entry.contracts || []).map(item => <li key={item}>{item}</li>)}</ul>
+    </details>
+  </section>;
 
-      return <article className="evidence-row" key={bidder.bidder_id}>
-        <strong>{bidder.name}</strong>
-        <p>{awards.length} public name match{awards.length === 1 ? "" : "es"}. No performance rating is assigned.</p>
-        {awards.length ? awards.map((record, index) => <details className="award-record" key={record.url + index}>
-          <summary>{record.title}</summary>
-          <p>{record.evidence}</p>
-          <a href={record.url} target="_blank" rel="noopener noreferrer">Open CPPP source</a>
-          <small>{record.match_method}</small>
-        </details>) : <p className="id">No matching result found. This is unknown information, not a negative finding.</p>}
-      </article>;
-    })}
-  </div>;
+  const awards = entry.award_records || [];
+  const lookupUnavailable = Boolean(entry.lookup_error);
+  const lookupLabel = lookupUnavailable
+    ? "Lookup unavailable"
+    : awards.length
+      ? `${awards.length} public name match${awards.length === 1 ? "" : "es"}`
+      : "No matching public record found";
+  const lookupMessage = lookupUnavailable
+    ? entry.lookup_error.toLowerCase().includes("not configured")
+      ? "TinyFish is not configured on this backend."
+      : "TinyFish could not complete this lookup. Retry later or check the CPPP source directly."
+    : awards.length
+      ? "These are name-only mentions. They do not verify legal identity, delivery, or performance."
+      : "Treat this as unknown information, not a negative performance finding.";
+
+  return <section className="bidder-history" aria-label="Public bidder history lookup">
+    <div className="history-heading"><strong>Public history</strong><span className={`history-badge${lookupUnavailable ? " history-badge-muted" : ""}`}>{lookupLabel}</span></div>
+    <p>{lookupMessage}</p>
+    <p className="history-verdict"><strong>Trustworthiness:</strong> Not determined by this lookup.</p>
+    {awards.map((record, index) => <details className="bidder-history-records" key={(record.url || record.title) + index}>
+      <summary>{record.title || "CPPP award record mention"}</summary>
+      <p>{record.evidence || "No excerpt was returned. Open the source record to review it."}</p>
+      {record.url && <a href={record.url} target="_blank" rel="noopener noreferrer">Open CPPP source</a>}
+      <small>{record.match_method || "Name-only search match; identity is not verified."}</small>
+    </details>)}
+    {checkedAt && <small className="history-checked">TinyFish lookup checked {new Date(checkedAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}</small>}
+  </section>;
 }
 
-function SubmittedBids({ bids, onStatusChange, onLoadSamples, synthetic }) {
+function SubmittedBids({ bids, history, onStatusChange, synthetic }) {
   if (!bids.length) return <div className="bidder-empty">
     <span className="bidder-empty-icon" aria-hidden="true">✦</span>
     <div><strong>No demo bids yet</strong><p>Preview the review screen with fictional bidder examples.</p></div>
-    <button type="button" className="secondary-button" onClick={onLoadSamples}>Load example bidders</button>
+    <p className="id">Example bidders load automatically when there are no demo submissions.</p>
   </div>;
 
   return <div className="bidder-grid">
     {bids.map((bid, index) => {
       const documents = bid.prepared_documents || [];
+      const historyEntry = (history?.bidders || []).find(item => item.bidder_id === bid.bid_id || item.name === bid.bidder_name);
       return <article className="bidder-card" key={bid.bid_id}>
         <div className="bidder-card-topline"><span>{synthetic ? "ILLUSTRATIVE BIDDER" : `BID ${String(index + 1).padStart(2, "0")}`}</span><span className="bidder-card-mark" aria-hidden="true">↗</span></div>
         <div className="bidder-card-identity">
@@ -61,6 +80,7 @@ function SubmittedBids({ bids, onStatusChange, onLoadSamples, synthetic }) {
             </select>}
           </label>
         </div>
+        <BidderHistoryEvidence entry={historyEntry} synthetic={synthetic} checkedAt={history?.checked_at} />
         <details className="bidder-details">
           <summary>Bid summary and checklist</summary>
           <p>{bid.technical_summary || "No technical summary provided."}</p>
@@ -96,17 +116,10 @@ export default function BuyerWorkspace({ tenders, tenderId, onTenderChange, hist
       </div>
       <p className="buyer-intro">Review each offer against the tender’s published criteria. Expand a card only when you need the technical summary or checklist.</p>
       {history?.is_synthetic && <div className="review-summary">The bidders and offers shown are fictional examples; they are not real submissions.</div>}
-      <SubmittedBids bids={bids} onStatusChange={onStatusChange} onLoadSamples={onLoadSamples} synthetic={Boolean(history?.is_synthetic)} />
+      <SubmittedBids bids={bids} history={history} onStatusChange={onStatusChange} synthetic={Boolean(history?.is_synthetic)} />
     </section>
 
-    <details className="evidence-disclosure">
-      <summary>{history?.is_synthetic ? "View fictional comparison details" : "Optional context: public CPPP award records"}</summary>
-      {history?.is_synthetic
-        ? <div className="review-summary">Fictional scores and outcomes are illustrative only. They must not be used to assign a tender.</div>
-        : <div className="review-summary">CPPP results are name-only matches. They do not verify legal identity, contract completion, delivery quality, or supplier performance. No match means unknown.</div>}
-      <BidderHistory data={history} />
-    </details>
-
-    <p className="review-disclaimer">Bid status changes are temporary and reset when the demo backend restarts. A human reviewer remains responsible for the decision.</p>
+    <p className="review-disclaimer">TinyFish searches public CPPP award records by bidder name only. No trustworthiness score is produced; verify the legal entity and source records. A human reviewer remains responsible for the decision. Bid status changes are temporary and reset when the demo backend restarts.</p>
   </section>;
 }
+

@@ -152,7 +152,7 @@ def eligibility(tender_id: str, profile: BusinessProfile):
 
 @app.get("/api/bidders/history/{tender_id}")
 def bidder_history(tender_id: str):
-    """Show real demo submitters and public CPPP award notices matching their names."""
+    """Fetch public CPPP award-name mentions for actual demo bid submitters."""
     tender = find_tender(tender_id)
     if not tender:
         raise HTTPException(status_code=404, detail="Tender not found")
@@ -184,6 +184,7 @@ def bidder_history(tender_id: str):
     return {
         "tender_id": tender_id,
         "source": "CPPP public Bid Awards search via TinyFish",
+        "tinyfish_configured": tinyfish_client.status()["configured"],
         "is_synthetic": False,
         "records_verified": False,
         "identity_match": "Name-only match; confirm legal entity before relying on a result",
@@ -208,21 +209,21 @@ def demo_buyer_scenario(tender_id: str):
     examples = [
         {
             "name": "Northstar Electrical Works (sample)",
-            "contracts": 10, "completed": 10, "on_time": 9, "quality": 4.8,
+            "contracts": 10, "completed": 10, "on_time": 9,
             "offer_factor": 0.96, "documents": ["Business registration proof", "Turnover / financial proof", "Relevant work orders", "EMD / exemption proof", "Technical offer"],
             "summary": "Sample technical approach: staged supply, installation, testing, and handover with a named project lead.",
             "record": ["Municipal street-light supply · completed on time", "District electrical upgrade · completed; inspection passed"],
         },
         {
             "name": "BrightGrid Systems (sample)",
-            "contracts": 10, "completed": 9, "on_time": 8, "quality": 4.2,
+            "contracts": 10, "completed": 9, "on_time": 8,
             "offer_factor": 0.91, "documents": ["Business registration proof", "Turnover / financial proof", "Relevant work orders", "Technical offer"],
             "summary": "Sample technical approach: delivery in two batches with installation and a maintenance handover plan.",
             "record": ["Public building lighting · completed", "Road junction upgrade · completed with a schedule extension"],
         },
         {
             "name": "CivicSpark Supplies (sample)",
-            "contracts": 8, "completed": 6, "on_time": 5, "quality": 4.2,
+            "contracts": 8, "completed": 6, "on_time": 5,
             "offer_factor": 0.86, "documents": ["Business registration proof", "Relevant work orders", "EMD / exemption proof", "Technical offer"],
             "summary": "Sample technical approach: supply-first plan with installation subcontract support.",
             "record": ["Ward lighting replacement · completed", "Electrical component supply · one delayed completion recorded"],
@@ -232,9 +233,6 @@ def demo_buyer_scenario(tender_id: str):
     bids = []
     value = tender.get("value_inr")
     for index, item in enumerate(examples, start=1):
-        completion_score = 5 * item["completed"] / item["contracts"]
-        on_time_score = 5 * item["on_time"] / item["contracts"]
-        rating = round((completion_score + on_time_score + item["quality"]) / 3, 1)
         bidder_id = f"SAMPLE-{tender_id}-{index}"
         bidders.append({
             "bidder_id": bidder_id,
@@ -243,13 +241,7 @@ def demo_buyer_scenario(tender_id: str):
             "completed_count": item["completed"],
             "on_time_count": item["on_time"],
             "delayed_count": item["completed"] - item["on_time"],
-            "quality_rating": item["quality"],
-            "history_rating_out_of_5": rating,
-            "rating_components": {
-                "completion_score_out_of_5": round(completion_score, 1),
-                "on_time_score_out_of_5": round(on_time_score, 1),
-                "sample_quality_score_out_of_5": item["quality"],
-            },
+            "incomplete_count": item["contracts"] - item["completed"],
             "contracts": item["record"],
             "coverage": "Synthetic illustration; not externally verified",
             "is_synthetic": True,
@@ -265,10 +257,7 @@ def demo_buyer_scenario(tender_id: str):
             "submitted_at": datetime.now(timezone.utc).isoformat(),
             "is_demo_submission": True,
             "is_synthetic": True,
-            "history_rating_out_of_5": rating,
         })
-    bidders.sort(key=lambda bidder: bidder["history_rating_out_of_5"], reverse=True)
-    bids.sort(key=lambda bid: bid["history_rating_out_of_5"], reverse=True)
     return {
         "tender_id": tender_id,
         "source": "Illustrative TenderWatch demo fixtures",
@@ -276,8 +265,7 @@ def demo_buyer_scenario(tender_id: str):
         "records_verified": False,
         "bidders": bidders,
         "bids": bids,
-        "rating_formula": "Illustrative /5 score = average of completion rate scaled to 5, on-time completion rate scaled to 5, and sample quality rating.",
-        "notice": "All bidder names, bids, contracts, outcomes, and ratings in this scenario are fictional. The score is a history comparison example, not a tender award recommendation.",
+        "notice": "All bidder names, offers, contract counts, and outcomes in this scenario are fictional examples. They are not connected to TinyFish or public records and do not establish trustworthiness or recommend a tender award.",
     }
 
 
@@ -318,4 +306,5 @@ def update_bid_status(bid_id: str, update: BidStatusUpdate):
         raise HTTPException(status_code=404, detail="Bid not found")
     bid["status"] = update.status
     return bid
+
 

@@ -121,15 +121,26 @@ export default function App() {
   async function loadBuyerTender(tenderId = buyerTenderId) {
     if (buyerLoading || !tenderId) return;
     setBuyerLoading(true);
-    setBuyerStatus("Loading selected tender and CPPP award matches…");
+    setBuyerStatus("Loading bidder history and tender responses…");
     try {
       const [historyData, bidData] = await Promise.all([
         api("/bidders/history/" + encodeURIComponent(tenderId)),
         api("/bids?tender_id=" + encodeURIComponent(tenderId))
       ]);
-      setHistory(historyData);
-      setBuyerBids(bidData.items || []);
-      setBuyerStatus("Loaded · demo bids and public CPPP lookup");
+      const actualBids = bidData.items || [];
+      if (actualBids.length) {
+        setHistory(historyData);
+        setBuyerBids(actualBids);
+        const unavailableLookups = (historyData.bidders || []).filter(bidder => bidder.lookup_error).length;
+        setBuyerStatus(unavailableLookups
+          ? `TinyFish history unavailable for ${unavailableLookups} bidder${unavailableLookups === 1 ? "" : "s"}.`
+          : "CPPP name searches loaded · verify each source record.");
+      } else {
+        const examples = await api("/demo/buyer-scenario/" + encodeURIComponent(tenderId));
+        setHistory(examples);
+        setBuyerBids(examples.bids || []);
+        setBuyerStatus("Showing fictional history examples · no real bids submitted.");
+      }
     } catch (error) {
       setBuyerStatus(error.message);
       setHistory(null);
@@ -201,3 +212,4 @@ export default function App() {
     <footer>TenderWatch · Built for MSMEs · Live public tender discovery is optional through TinyFish. Verify all details in official tender documents.</footer>
   </>;
 }
+
